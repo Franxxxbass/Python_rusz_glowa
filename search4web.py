@@ -1,18 +1,43 @@
+import mysql
 from flask import Flask, render_template, request, escape
 from vsearch import search4letters
+from mysql import connector
 
 app = Flask(__name__)
 
 
+def get_browser(req: 'flask_request') -> str:
+    """splits request.user_agent to get name of browser"""
+    lst = str(req.user_agent).split()
+    browser = lst[-1].split('/')
+    return browser[0]
+
+
 def log_request(req: 'flask_request', res: str) -> None:
-    """Logs details and results of web request"""
-    with open('vsearch.log', 'a') as log:
-        print(req.form, req.remote_addr, req.user_agent, res, file=log, sep='|')
+    """Logs details and results of web request and stores data in database"""
+    dbconfig = { 'host': '127.0.0.1',
+                 'user': 'search',
+                 'password': 'searchpasswd',
+                 'database': 'vsearchlogDB',}
+
+    conn = mysql.connector.connect(**dbconfig)
+    cursor = conn.cursor()
+    _SQL = """insert into log (phrase, letters, ip, browser_string, results)
+    values (%s, %s, %s, %s, %s)"""
+    cursor.execute(_SQL, (req.form['phrase'],
+                          req.form['letters'],
+                          req.remote_addr,
+                          get_browser(req),
+                          res,)
+                   )
+    conn.commit()
+    cursor.close()
 
 
 @app.route('/search4', methods=['POST'])
 def do_search() -> str:
     """Extracts given data; conducts search, returns results """
+
     phrase = request.form['phrase']
     letters = request.form['letters']
     results = str(search4letters(phrase, letters))
